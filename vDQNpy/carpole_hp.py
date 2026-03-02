@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 from typing import Tuple, List
+from PIL import Image
 
 """
 Instructions
@@ -29,7 +30,44 @@ class DQN(nn.Module):
 
     def forward(self, x):
         return self.layers(x) #了解
+
+def save_gym_gif(env, policy_net, filename="cartpole_training.gif", max_steps=500):
+    print("正在生成 GIF...")
+    frames = []
+    # 重新创建一个 render_mode 为 rgb_array 的环境
+    render_env = gym.make("CartPole-v1", render_mode="rgb_array")
+    state, _ = render_env.reset()
     
+    for t in range(max_steps):
+        # 渲染当前帧并保存
+        frame = render_env.render()
+        frames.append(Image.fromarray(frame))
+        
+        # 使用训练好的模型选择动作 (不进行探索，即 epsilon = 0)
+        state_tensor = torch.FloatTensor(state).unsqueeze(0)
+        with torch.no_grad():
+            action = policy_net(state_tensor).max(1)[1].item()
+        
+        state, reward, terminated, truncated, _ = render_env.step(action)
+        state = state.astype(np.float32)
+        
+        if terminated or truncated:
+            break
+            
+    # 保存为 GIF
+    # duration 是每帧之间的毫秒数。50ms = 20fps
+    # 如果想让 250 步跑满 5 秒，duration 设为 20；如果想让 500 步跑满 5 秒，duration 设为 10。
+    frames[0].save(
+        filename, 
+        save_all=True, 
+        append_images=frames[1:], 
+        optimize=False, 
+        duration=20, 
+        loop=0
+    )
+    render_env.close()
+    print(f"GIF 已保存至: {filename}")
+
 class ReplayBufferOptimized:
     
     def __init__(self, capacity: int, state_dim: Tuple[int, ...], dtype=np.float32):
@@ -202,7 +240,7 @@ TARGET_UPDATE = 10     # 目标网络更新频率（每多少步）
 MEMORY_CAPACITY = 10000 # 经验回放容量
 BATCH_SIZE = 64        # 批次大小
 LR = 1e-4              #Learning Rate
-EPISODE_SETTINGS = 3000 #Total Episodes
+EPISODE_SETTINGS = 530 #Total Episodes
 F_NAME = "dqn_cartpole_hp_results.txt" #File Name
 
 # 收集所有超参数到一个字典中，方便传递
@@ -292,5 +330,7 @@ for episode in range(EPISODE_SETTINGS):
 save_results_to_txt(episode_durations, episode_times, HYPER_PARAMS, F_NAME)
 plot_durations()
 plt.show(block=True)
+
+save_gym_gif(env, policy_net)
 
 env.close()
